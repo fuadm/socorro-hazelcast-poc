@@ -1,0 +1,27 @@
+<project basedir="." name="socorro-hazelcast-poc" default="jar">
+    <property name="src.dir" value="src"/>
+    <property name="classes.dir" value="classes"/>
+    <property name="jar.name" value="socorro-hazelcast-poc.jar"/>
+
+
+    <target name="jar">
+        <delete dir="${classes.dir}" failonerror="false"/>
+        <mkdir dir="${classes.dir}"/>
+        <javac destdir="${classes.dir}" compiler="javac1.5" debug="on" nowarn="yes">
+            <src path="${src.dir}"/>
+            <classpath>
+                <path location="/apps/projects/hazelcast/svn/trunk/hazelcast/target/classes/"/>
+            </classpath>
+        </javac>
+        <jar jarfile="${jar.name}">
+            <fileset dir="${src.dir}"/>
+            <fileset dir="${classes.dir}"/>
+            <fileset dir="/apps/projects/hazelcast/svn/trunk/hazelcast/target/classes/"/>
+            <manifest>
+                <attribute name="Built-By" value="Hazelcast"/>
+                <attribute name="Main-Class" value="com.hazelcast.examples.SimpleMapTest"/>
+            </manifest>
+        </jar>
+    </target>
+
+</project>
