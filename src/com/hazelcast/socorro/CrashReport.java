@@ -17,9 +17,6 @@
 
 package com.hazelcast.socorro;
 
-import DistLib.f;
-import DistLib.uniform;
-
 import java.io.Serializable;
 import java.util.Date;
 import java.util.HashMap;
@@ -60,25 +57,24 @@ public class CrashReport implements Serializable {
         return id;
     }
 
-
     private static Map generateMap() {
         Map<String, Object> map = new HashMap<String, Object>();
         map.put("InstallTime", new Date().getTime());
         map.put("Comments", randomString(random.nextInt(100)));
         map.put("Theme", "classic/1.0");
-        map.put("Version","4.0b10pre");
+        map.put("Version", "4.0b10pre");
         map.put("id", "ec8030f7-c20a-464f-9b0e-13a3a9e97384");
         map.put("Vendor", "Mozilla");
-        map.put("EMCheckCompatibility", random(0,1)==0);
+        map.put("EMCheckCompatibility", random(0, 1) == 0);
         map.put("Throttleable", random.nextInt(5));
-        map.put("Email", randomString(random(3,10))+"@"+randomString(random(5,10))+".com");
+        map.put("Email", randomString(random(3, 10)) + "@" + randomString(random(5, 10)) + ".com");
         map.put("URL", "http://nighthacks.com/roller/jag/entry/the_shit_finally_hits_the");
         map.put("version", "4.0b10pre");
         map.put("CrashTime", "1295903735");
         map.put("ReleaseChannel", "nightly");
         map.put("submitted_timestamp", "2011-01-24T13:15:48.550858");
         map.put("buildid", "20110121153230");
-        map.put("timestamp",1295903748.551002);
+        map.put("timestamp", 1295903748.551002);
         map.put("Notes", "Renderers: 0x22600,0x22600,0x20400");
         map.put("StartupTime", "1295768964");
         map.put("FramePoisonSize", "4096");
@@ -120,39 +116,16 @@ public class CrashReport implements Serializable {
         this.id = id;
     }
 
-    public static void main(String[] args) {
-        int average = 0;
-        int min = Integer.MAX_VALUE;
-        int max = Integer.MIN_VALUE;
-//        ArrayList<Integer> list = new ArrayList<Integer>();
-        int tryCount = 200;
-        for (int i = 0; i < tryCount; i++) {
-            System.out.println(randomString(i));
-            int d = (int) (f.random(10, 10, new uniform()) * 500);
-//            int d = generate(200, 20000, 500);
-            average += d;
-            min = Math.min(min, d);
-            max = Math.max(max, d);
-            System.out.println(d);
-//            list.add(d);
-        }
-        System.out.println("Average:" + average / tryCount);
-        System.out.println("Min:" + min);
-        System.out.println("Max:" + max);
-//        System.out.println("Min:" + Collections.min(list));
-//        System.out.println("Max:" + Collections.max(list));
-    }
-
     //inclusive min and max
     static int random(int min, int max) {
         return random.nextInt(max - min + 1) + min;
     }
 
-    static int generate(int min, int max, int average){
-    if(random(0, 1) == 0){
-        return random(min, average);
-    } else {
-        return random(average, max);
+    static int generate(int min, int max, int average) {
+        if (random(0, 1) == 0) {
+            return random(min, average);
+        } else {
+            return random(average, max);
+        }
     }
-}
 }
