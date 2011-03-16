@@ -30,15 +30,16 @@
         <max-size-per-jvm>0</max-size-per-jvm>
         <time-to-live-seconds>0</time-to-live-seconds>
     </queue>
-    <map name="default">
+    <map name="crashReports">
         <backup-count>1</backup-count>
-        <eviction-policy>NONE</eviction-policy>
-        <max-size>0</max-size>
-        <eviction-percentage>25</eviction-percentage>
+        <eviction-policy>LRU</eviction-policy>
+        <max-size>100000</max-size>
+        <eviction-percentage>100</eviction-percentage>
         <merge-policy>hz.ADD_NEW_ENTRY</merge-policy>
         <map-store enabled="true">
             <class-name>com.hazelcast.socorro.persistence.ElasticSearchMapStore</class-name>
-            <write-delay-seconds>30</write-delay-seconds>
+            <write-delay-seconds>5</write-delay-seconds>
+            <property name = "host1">localhost</property>
         </map-store>
     </map>
 </hazelcast>

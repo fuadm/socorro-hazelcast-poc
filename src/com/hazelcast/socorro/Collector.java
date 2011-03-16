@@ -97,7 +97,7 @@ public class Collector{
                 }
                 logger.info("Generated "+crashToGenerate + " amount of Crashreports. Current size in the local Q is: " + generatedCrashReports.size() );
             }
-        }, 0, 1000);
+        }, 0, 60000);
     }
 
     public static void main(String[] args) {

@@ -30,34 +30,39 @@ import org.elasticsearch.action.delete.DeleteResponse;
 import org.elasticsearch.action.get.GetResponse;
 import org.elasticsearch.action.index.IndexRequest;
 import org.elasticsearch.action.index.IndexResponse;
-import org.elasticsearch.client.Client;
 import org.elasticsearch.client.transport.TransportClient;
 import org.elasticsearch.common.transport.InetSocketTransportAddress;
 
 import java.util.Collection;
+import java.util.HashMap;
 import java.util.Map;
 import java.util.Properties;
 import java.util.concurrent.ExecutionException;
 
 public class ElasticSearchMapStore implements MapStore<Long, CrashReport>, MapLoaderLifecycleSupport {
     private static final String TYPE = "crash_report";
-    volatile Client client;
+    private static final String DUMP = "blob_dump";
+    volatile TransportClient client;
     volatile String INDEX;
 
     public void init(HazelcastInstance hazelcastInstance, Properties properties, String mapName) {
-        this.INDEX = mapName;
-        String host1 = (String) properties.get("host1");
-        String host2 = (String) properties.get("host2");
-        this.client = new TransportClient()
-                .addTransportAddress(new InetSocketTransportAddress(host1, 9300))
-                .addTransportAddress(new InetSocketTransportAddress(host2, 9300));
+        this.INDEX = mapName.toLowerCase();
+        this.client = new TransportClient();
+        for(int i=0;i<10;i++){
+            String property = "host" + i;
+            properties.get(property);
+            if(properties.get(property)!=null){
+                String value = (String)properties.get(property);
+                this.client.addTransportAddress(new InetSocketTransportAddress(value, 9300));
+           }
+        }
     }
 
     public void destroy() {
         client.close();
     }
 
-    public void store(java.lang.Long key, CrashReport value) {
+    public void store(Long key, CrashReport value) {
         ListenableActionFuture<IndexResponse> result = client.prepareIndex(INDEX, TYPE, String.valueOf(key)).setSource(value.getJSON()).execute();
         verify(result);
     }
@@ -72,10 +77,13 @@ public class ElasticSearchMapStore implements MapStore<Long, CrashReport>, MapLo
         }
     }
 
-    public void storeAll(Map<java.lang.Long, CrashReport> longCrashReportMap) {
+    public void storeAll(Map<Long, CrashReport> crashReportMap) {
+        System.out.println("Storing " + crashReportMap.size() + " entries");
         BulkRequest bulkRequest = new BulkRequest();
-        for (Long key : longCrashReportMap.keySet()) {
-            bulkRequest.add(new IndexRequest(INDEX, TYPE, String.valueOf(key)).source(longCrashReportMap.get(key).getJSON()));
+        for (Long key : crashReportMap.keySet()) {
+            Map map = new HashMap(crashReportMap.get(key).getJSON());
+            map.put(DUMP, crashReportMap.get(key).getDump());
+            bulkRequest.add(new IndexRequest(INDEX, TYPE, String.valueOf(key)).source(map));
         }
         verify(bulkRequest);
     }
@@ -84,13 +92,17 @@ public class ElasticSearchMapStore implements MapStore<Long, CrashReport>, MapLo
         try {
             BulkResponse response = client.bulk(bulkRequest).get();
             if (response.hasFailures()) {
-                throw new RuntimeException("There was a failure while indexing entries to ES");
+                throw new RuntimeException("There was a failure while indexing entries to ES: " + response);
             }
         } catch (InterruptedException e) {
             return;
-        } catch (ExecutionException e) {
+        } catch (RuntimeException e){
+            throw e;
+        } catch (Exception e){
+            e.printStackTrace();
             throw new RuntimeException(e);
         }
+
     }
 
     public void delete(java.lang.Long key) {
@@ -110,7 +122,11 @@ public class ElasticSearchMapStore implements MapStore<Long, CrashReport>, MapLo
         ListenableActionFuture<GetResponse> result = client.prepareGet(INDEX, TYPE, String.valueOf(key)).execute();
         try {
             GetResponse response = result.get();
+            Map map = response.getSource();
+            byte[] dump = (byte[])map.get(DUMP);
+            map.remove(DUMP);
             CrashReport crashReport = new CrashReport(response.getSource());
+            crashReport.setDump(dump);
             return crashReport;
         } catch (InterruptedException e) {
             return null;
