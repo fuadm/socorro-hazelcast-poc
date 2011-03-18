@@ -20,13 +20,13 @@ package com.hazelcast.socorro;
 public class Node {
 
     public static void main(String[] args) {
-        int nThreadsForCollector = 2;
-        int nThreadsForProcessor = 2;
+        int nThreadsForCollector = 40;
+        int nThreadsForProcessor = 40;
         if (args.length > 1) {
             nThreadsForCollector = Integer.parseInt(args[0]);
             nThreadsForProcessor = Integer.parseInt(args[1]);
         }
-        new Collector(nThreadsForCollector);
-        new Processor(nThreadsForProcessor);
+        new com.hazelcast.socorro.v2.Collector(nThreadsForCollector);
+        new com.hazelcast.socorro.v2.Processor(nThreadsForProcessor);
     }
 }

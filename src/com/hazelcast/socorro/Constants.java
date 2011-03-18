@@ -20,5 +20,6 @@ package com.hazelcast.socorro;
 public class Constants {
 
     public static final String CRASH_REPORT_MAP = "crashReports";
+    public static final String CRASH_PROCESSED_MAP = "processed";
     public static final String CRASH_REPORT_Q = "crashReports";
 }

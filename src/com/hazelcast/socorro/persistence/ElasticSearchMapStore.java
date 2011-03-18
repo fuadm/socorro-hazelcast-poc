@@ -123,9 +123,9 @@ public class ElasticSearchMapStore implements MapStore<Long, CrashReport>, MapLo
         try {
             GetResponse response = result.get();
             Map map = response.getSource();
-            byte[] dump = (byte[])map.get(DUMP);
-            map.remove(DUMP);
-            CrashReport crashReport = new CrashReport(response.getSource());
+
+            byte[] dump = (byte[])map.remove(DUMP);
+            CrashReport crashReport = new CrashReport(map, dump);
             crashReport.setDump(dump);
             return crashReport;
         } catch (InterruptedException e) {

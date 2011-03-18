@@ -26,6 +26,7 @@ import java.util.HashMap;
 import java.util.Map;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
+import java.util.logging.Level;
 import java.util.logging.Logger;
 
 import static com.hazelcast.socorro.Constants.CRASH_REPORT_MAP;
@@ -54,6 +55,7 @@ public class Processor {
                             map.put(reportId, report);
                             transaction.commit();
                         } catch (Exception e) {
+                            logger.log(Level.INFO, "Processor transaction rollback: ", e);
                             transaction.rollback();
                         }
                     }
@@ -63,34 +65,34 @@ public class Processor {
         logger.info("Processor started with " + nThreads + " threads.");
     }
 
-    private void process(Map map) {
+    private void process(Map<String, Object> map) {
         map.put("client_crash_date", "2011-01-24 21:15:35.0");
         map.put("dump", randomString(generate(5*KILO_BYTE, 500*KILO_BYTE, 50*KILO_BYTE)));
         map.put("startedDateTime", "2011-01-24 13:15:52.657344");
         map.put("app_notes", "renderers: 0x22600,0x22600,0x20400");
-        map.put("crashedThread", 0);
+        map.put("crashedThread", "0");
         map.put("cpu_info", "family 6 model 23 stepping 10 | 2");
-        map.put("install_age", 134773);
-        map.put("distributor", null);
+        map.put("install_age", "134773");
+        map.put("distributor", "null");
         map.put("topmost_filenames", randomString(100));
         map.put("processor_notes", randomString(100));
         map.put("user_comments", "Will test without extension.");
         map.put("build_date", "2011-01-21 15:00:00.0");
-        map.put("uptime", 134771);
+        map.put("uptime", "134771");
         map.put("uuid", "4ecc5fc9-81d5-41a4-9b4c-313942110124");
         map.put("flash_version", "[blank]");
         map.put("os_version", "10.6.5 10H574");
-        map.put("distributor_version", null);
-        map.put("truncated", true);
-        map.put("process_type", null);
-        map.put("id", 211153043);
-        map.put("hangid", null);
+        map.put("distributor_version", "null");
+        map.put("truncated", "true");
+        map.put("process_type", "null");
+        map.put("id", "211153043");
+        map.put("hangid", "null");
         map.put("version", "4.0b10pre");
         map.put("build", "20110121153230");
-        map.put("addons_checked", null);
+        map.put("addons_checked", "null");
         map.put("product", "firefox");
         map.put("os_name", "Mac OS X");
-        map.put("last_crash", 810473);
+        map.put("last_crash", "810473");
         map.put("date_processed", "2011-01-24 13:15:48.550858");
         map.put("cpu_name", "amd64");
         map.put("reason", "eXC_BAD_ACCESS / KERN_INVALID_ADDRESS");

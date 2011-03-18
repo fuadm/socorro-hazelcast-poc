@@ -18,7 +18,6 @@
 package com.hazelcast.socorro;
 
 import com.hazelcast.core.*;
-import static com.hazelcast.socorro.Constants.*;
 
 import java.util.Random;
 import java.util.Timer;
@@ -29,12 +28,16 @@ import java.util.concurrent.Executors;
 import java.util.concurrent.LinkedBlockingQueue;
 import java.util.logging.Logger;
 
-public class Collector{
+import static com.hazelcast.socorro.Constants.CRASH_REPORT_MAP;
+import static com.hazelcast.socorro.Constants.CRASH_REPORT_Q;
+import static com.hazelcast.socorro.CrashReport.*;
+
+public class Collector {
     private volatile boolean running = true;
-    private static volatile int SIZE = 2500;
+    private static volatile int SIZE = 1;
+    private static volatile int COUNT = 10;
     private final BlockingQueue<CrashReport> generatedCrashReports = new LinkedBlockingQueue<CrashReport>(SIZE);
     Logger logger = Logger.getLogger(this.getClass().getName());
-
 
     public Collector(int nThreads) {
         final ExecutorService executors = Executors.newFixedThreadPool(nThreads);
@@ -87,21 +90,23 @@ public class Collector{
         timer.schedule(new TimerTask() {
             @Override
             public void run() {
-//                int size = generatedCrashReports.size();
-                int crashToGenerate = SIZE/Hazelcast.getCluster().getMembers().size();
-                for (int i = 0; i < crashToGenerate; i++) {
-                    CrashReport crashReport = new CrashReport();
+                for (int i = 0; i < SIZE; i++) {
+
+                    CrashReport crashReport = new CrashReport(CrashReport.generateMap(), new byte[randomSizeForBlob() * KILO_BYTE]);
                     crashReport.setId(Hazelcast.getIdGenerator("ids").newId());
-                    crashReport.setId(random.nextInt(10000));
-                    generatedCrashReports.offer(crashReport);
+//                    crashReport.setId(random.nextInt(COUNT));
+                    try {
+                        generatedCrashReports.put(crashReport);
+                    } catch (InterruptedException e) {
+                        return;
+                    }
                 }
-                logger.info("Generated "+crashToGenerate + " amount of Crashreports. Current size in the local Q is: " + generatedCrashReports.size() );
+                logger.info("Generated " + SIZE + " amount of Crashreports. Current size in the local Q is: " + generatedCrashReports.size());
             }
-        }, 0, 60000);
+        }, 0, 1000);
     }
 
     public static void main(String[] args) {
         Collector node = new Collector(Integer.parseInt(args[0]));
-
     }
 }
