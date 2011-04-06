@@ -28,20 +28,21 @@ import java.util.concurrent.Executors;
 import java.util.concurrent.LinkedBlockingQueue;
 import java.util.logging.Logger;
 
+import static com.hazelcast.socorro.Constants.CRASH_PROCESSED_MAP;
 import static com.hazelcast.socorro.Constants.CRASH_REPORT_MAP;
 import static com.hazelcast.socorro.Constants.CRASH_REPORT_Q;
 import static com.hazelcast.socorro.CrashReport.*;
 
 public class Collector {
     private volatile boolean running = true;
-    private static volatile int SIZE = 1;
-    private static volatile int COUNT = 10;
-    private final BlockingQueue<CrashReport> generatedCrashReports = new LinkedBlockingQueue<CrashReport>(SIZE);
+    private volatile int LOAD = 2*60;
+    private final BlockingQueue<CrashReport> generatedCrashReports = new LinkedBlockingQueue<CrashReport>(10);
     Logger logger = Logger.getLogger(this.getClass().getName());
 
     public Collector(int nThreads) {
         final ExecutorService executors = Executors.newFixedThreadPool(nThreads);
         final IMap<Long, CrashReport> map = Hazelcast.getMap(CRASH_REPORT_MAP);
+        final IMap<Long, Long> mapInfo = Hazelcast.getMap(CRASH_PROCESSED_MAP);
         final IQueue<Long> queue = Hazelcast.getQueue(CRASH_REPORT_Q);
         for (int i = 0; i < nThreads; i++) {
             executors.execute(new Runnable() {
@@ -54,6 +55,7 @@ public class Collector {
                                 transaction.begin();
                                 map.put(report.getId(), report);
                                 queue.offer(report.getId());
+                                mapInfo.put(report.getId(), System.currentTimeMillis());
                                 transaction.commit();
                             } catch (Exception e) {
                                 e.printStackTrace();
@@ -72,36 +74,33 @@ public class Collector {
     }
 
     private void listenForCommands() {
-        Hazelcast.getTopic("command").addMessageListener(new MessageListener<Object>() {
-            public void onMessage(Object message) {
-                String str = (String) message;
-                logger.info("Received command: " + str);
-                if (str.startsWith("s")) {
-                    SIZE = Integer.parseInt(str.substring(1));
-                    logger.info("SIZE is set to " + SIZE);
-                }
-            }
-        });
-    }
+           Hazelcast.getTopic("command").addMessageListener(new MessageListener<Object>() {
+               public void onMessage(Object message) {
+                   String str = (String) message;
+                   logger.info("Received command: " + str);
+                   if (str.startsWith("l")) {
+                       LOAD = Integer.parseInt(str.substring(1));
+                       logger.info("LOAD is set to " + LOAD);
+                   }
+               }
+           });
+       }
 
-    private void generateCrashReportsPeriodically() {
+
+private void generateCrashReportsPeriodically() {
         final Random random = new Random();
         Timer timer = new Timer();
         timer.schedule(new TimerTask() {
             @Override
             public void run() {
-                for (int i = 0; i < SIZE; i++) {
-
+                int k = LOAD/(Hazelcast.getCluster().getMembers().size()*60);
+                for (int i = 0; i < k; i++) {
                     CrashReport crashReport = new CrashReport(CrashReport.generateMap(), new byte[randomSizeForBlob() * KILO_BYTE]);
                     crashReport.setId(Hazelcast.getIdGenerator("ids").newId());
-//                    crashReport.setId(random.nextInt(COUNT));
-                    try {
-                        generatedCrashReports.put(crashReport);
-                    } catch (InterruptedException e) {
-                        return;
-                    }
+//                    crashReport.setId(random.nextInt(10));
+                    generatedCrashReports.offer(crashReport);
                 }
-                logger.info("Generated " + SIZE + " amount of Crashreports. Current size in the local Q is: " + generatedCrashReports.size());
+                logger.info("Generated " + k + " number of Crash Reports. Current size in the local Q is: "+ generatedCrashReports.size());
             }
         }, 0, 1000);
     }

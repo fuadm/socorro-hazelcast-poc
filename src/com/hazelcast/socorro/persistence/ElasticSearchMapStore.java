@@ -38,6 +38,7 @@ import java.util.HashMap;
 import java.util.Map;
 import java.util.Properties;
 import java.util.concurrent.ExecutionException;
+import java.util.logging.Logger;
 
 public class ElasticSearchMapStore implements MapStore<Long, CrashReport>, MapLoaderLifecycleSupport {
     private static final String TYPE = "crash_report";
@@ -45,16 +46,18 @@ public class ElasticSearchMapStore implements MapStore<Long, CrashReport>, MapLo
     volatile TransportClient client;
     volatile String INDEX;
 
+    final Logger logger = Logger.getLogger(this.getClass().getName());
+
     public void init(HazelcastInstance hazelcastInstance, Properties properties, String mapName) {
         this.INDEX = mapName.toLowerCase();
         this.client = new TransportClient();
-        for(int i=0;i<10;i++){
+        for (int i = 0; i < 10; i++) {
             String property = "host" + i;
             properties.get(property);
-            if(properties.get(property)!=null){
-                String value = (String)properties.get(property);
+            if (properties.get(property) != null) {
+                String value = (String) properties.get(property);
                 this.client.addTransportAddress(new InetSocketTransportAddress(value, 9300));
-           }
+            }
         }
     }
 
@@ -78,7 +81,9 @@ public class ElasticSearchMapStore implements MapStore<Long, CrashReport>, MapLo
     }
 
     public void storeAll(Map<Long, CrashReport> crashReportMap) {
-        System.out.println("Storing " + crashReportMap.size() + " entries");
+
+        logger.info(Thread.currentThread().getId() + ": Storing " + crashReportMap.size() + " entries ");
+        long current = System.currentTimeMillis();
         BulkRequest bulkRequest = new BulkRequest();
         for (Long key : crashReportMap.keySet()) {
             Map map = new HashMap(crashReportMap.get(key).getJSON());
@@ -86,6 +91,7 @@ public class ElasticSearchMapStore implements MapStore<Long, CrashReport>, MapLo
             bulkRequest.add(new IndexRequest(INDEX, TYPE, String.valueOf(key)).source(map));
         }
         verify(bulkRequest);
+        logger.info(Thread.currentThread().getId() + ": Stored " + crashReportMap.size() + " entries in " + (System.currentTimeMillis() - current) + " ms");
     }
 
     private void verify(BulkRequest bulkRequest) {
@@ -96,13 +102,12 @@ public class ElasticSearchMapStore implements MapStore<Long, CrashReport>, MapLo
             }
         } catch (InterruptedException e) {
             return;
-        } catch (RuntimeException e){
+        } catch (RuntimeException e) {
             throw e;
-        } catch (Exception e){
+        } catch (Exception e) {
             e.printStackTrace();
             throw new RuntimeException(e);
         }
-
     }
 
     public void delete(java.lang.Long key) {
@@ -123,8 +128,7 @@ public class ElasticSearchMapStore implements MapStore<Long, CrashReport>, MapLo
         try {
             GetResponse response = result.get();
             Map map = response.getSource();
-
-            byte[] dump = (byte[])map.remove(DUMP);
+            byte[] dump = (byte[]) map.remove(DUMP);
             CrashReport crashReport = new CrashReport(map, dump);
             crashReport.setDump(dump);
             return crashReport;

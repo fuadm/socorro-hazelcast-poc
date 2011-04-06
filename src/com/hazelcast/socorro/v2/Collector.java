@@ -23,6 +23,7 @@ import com.hazelcast.core.MessageListener;
 import com.hazelcast.core.Transaction;
 import com.hazelcast.socorro.CrashReport;
 
+import java.util.Date;
 import java.util.Random;
 import java.util.Timer;
 import java.util.TimerTask;
@@ -40,14 +41,14 @@ import static com.hazelcast.socorro.CrashReport.randomSizeForBlob;
 
 public class Collector {
     private volatile boolean running = true;
-    private static volatile int SIZE = 1;
-    private final BlockingQueue<CrashReport> generatedCrashReports = new LinkedBlockingQueue<CrashReport>(1000);
+    private volatile int LOAD = 2*60;
+    private final BlockingQueue<CrashReport> generatedCrashReports = new LinkedBlockingQueue<CrashReport>(10);
     Logger logger = Logger.getLogger(this.getClass().getName());
 
     public Collector(int nThreads) {
         final ExecutorService executors = Executors.newFixedThreadPool(nThreads);
         final IMap<Long, CrashReport> map = Hazelcast.getMap(CRASH_REPORT_MAP);
-        final IMap<Long, Boolean> mapProcessed = Hazelcast.getMap(CRASH_PROCESSED_MAP);
+        final IMap<Long, Long> mapProcessed = Hazelcast.getMap(CRASH_PROCESSED_MAP);
         for (int i = 0; i < nThreads; i++) {
             executors.execute(new Runnable() {
                 public void run() {
@@ -57,7 +58,7 @@ public class Collector {
                             txn.begin();
                             CrashReport report = generatedCrashReports.take();
                             map.put(report.getId(), report);
-                            mapProcessed.put(report.getId(), true);
+                            mapProcessed.put(report.getId(), new Date().getTime());
                             txn.commit();
                         } catch (Throwable e) {
                             logger.log(Level.INFO, "rollbacking", e);
@@ -71,6 +72,7 @@ public class Collector {
         listenForCommands();
         generateCrashReportsPeriodically();
         logger.info("Collector started with " + nThreads + " threads.");
+
     }
 
     private void listenForCommands() {
@@ -78,9 +80,9 @@ public class Collector {
             public void onMessage(Object message) {
                 String str = (String) message;
                 logger.info("Received command: " + str);
-                if (str.startsWith("s")) {
-                    SIZE = Integer.parseInt(str.substring(1));
-                    logger.info("SIZE is set to " + SIZE);
+                if (str.startsWith("l")) {
+                    LOAD = Integer.parseInt(str.substring(1));
+                    logger.info("LOAD is set to " + LOAD);
                 }
             }
         });
@@ -92,13 +94,14 @@ public class Collector {
         timer.schedule(new TimerTask() {
             @Override
             public void run() {
-                for (int i = 0; i < SIZE; i++) {
+                int k = LOAD/(Hazelcast.getCluster().getMembers().size()*60);
+                for (int i = 0; i < k; i++) {
                     CrashReport crashReport = new CrashReport(CrashReport.generateMap(), new byte[randomSizeForBlob() * KILO_BYTE]);
                     crashReport.setId(Hazelcast.getIdGenerator("ids").newId());
 //                    crashReport.setId(random.nextInt(10));
                     generatedCrashReports.offer(crashReport);
                 }
-                logger.info("Generated " + SIZE + " amount of Crashreports. Current size in the");
+                logger.info("Generated " + k + " number of Crash Reports. Current size in the local Q is: "+ generatedCrashReports.size());
             }
         }, 0, 1000);
     }

@@ -17,10 +17,7 @@
 
 package com.hazelcast.socorro.v2;
 
-import com.hazelcast.core.EntryEvent;
-import com.hazelcast.core.EntryListener;
-import com.hazelcast.core.Hazelcast;
-import com.hazelcast.core.IMap;
+import com.hazelcast.core.*;
 import com.hazelcast.socorro.CrashReport;
 
 import java.util.HashMap;
@@ -37,46 +34,69 @@ import static com.hazelcast.socorro.CrashReport.*;
 
 public class Processor {
     final IMap<Long, CrashReport> map = Hazelcast.getMap(CRASH_REPORT_MAP);
-    final IMap<Long, Boolean> mapProcessed = Hazelcast.getMap(CRASH_PROCESSED_MAP);
+    final IMap<Long, Long> mapProcessed = Hazelcast.getMap(CRASH_PROCESSED_MAP);
     final ExecutorService executorService;
     final Logger logger = Logger.getLogger(this.getClass().getName());
 
     public Processor(int nThreads) {
         executorService = Executors.newFixedThreadPool(nThreads);
-        mapProcessed.addLocalEntryListener(new EntryListener<Long, Boolean>() {
+        mapProcessed.addLocalEntryListener(new EntryListener<Long, Long>() {
             @Override
-            public void entryAdded(final EntryEvent<Long, Boolean> event) {
+            public void entryAdded(final EntryEvent<Long, Long> event) {
                 final long key = event.getKey();
                 processTransactional(key);
             }
 
             @Override
-            public void entryRemoved(EntryEvent<Long, Boolean> longBooleanEntryEvent) {
+            public void entryRemoved(EntryEvent<Long, Long> event) {
                 //To change body of implemented methods use File | Settings | File Templates.
             }
 
             @Override
-            public void entryUpdated(EntryEvent<Long, Boolean> longBooleanEntryEvent) {
+            public void entryUpdated(EntryEvent<Long, Long> event) {
                 //To change body of implemented methods use File | Settings | File Templates.
             }
 
             @Override
-            public void entryEvicted(EntryEvent<Long, Boolean> longBooleanEntryEvent) {
+            public void entryEvicted(EntryEvent<Long, Long> event) {
                 //To change body of implemented methods use File | Settings | File Templates.
             }
         });
+        listenForCommands();
         Timer timer = new Timer();
         timer.schedule(new TimerTask() {
             @Override
             public void run() {
-                logger.info("There is "+ mapProcessed.localKeySet().size() + " number of unprocessed reports!. Processing them now!");
+                int counter = 0;
                 for (final long key : mapProcessed.localKeySet()) {
-                    processTransactional(key);
+                    long time = mapProcessed.get(key);
+                    if(System.currentTimeMillis() - 600000 > time){
+                        processTransactional(key);
+                        counter++;
+                    }
                 }
+                logger.info("There is " + counter + " number of unprocessed reports!." + ((counter == 0) ? "" : " Processing them now!"));
             }
         }
-                , 30000, 30000);
+                , 300000, 300000);
         logger.info("Processor started with " + nThreads + " threads.");
+    }
+
+    private void listenForCommands() {
+        Hazelcast.getTopic("command").addMessageListener(new MessageListener<Object>() {
+            public void onMessage(Object message) {
+                String str = (String) message;
+                logger.info("Received command: " + str);
+                if (str.startsWith("process")) {
+                    int counter = 0;
+                    for (final long key : mapProcessed.localKeySet()) {
+                        processTransactional(key);
+                        counter++;
+                    }
+                    logger.info("There is " + counter + " number of unprocessed reports!." + ((counter == 0) ? "" : " Processing them now!"));
+                }
+            }
+        });
     }
 
     private void processTransactional(final long key) {
@@ -88,8 +108,8 @@ public class Processor {
                         if (report != null && !report.processed()) {
                             process(report.getJSON());
                             report.setProcessed(true);
-                            map.put(report.getId(), report);
-                            mapProcessed.remove(report.getId());
+                            map.put(key, report);
+                            mapProcessed.remove(key);
                         } else {
                             mapProcessed.remove(key);
                         }

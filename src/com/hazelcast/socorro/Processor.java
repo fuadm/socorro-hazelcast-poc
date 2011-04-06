@@ -46,17 +46,17 @@ public class Processor {
             executorService.execute(new Runnable() {
                 public void run() {
                     while (running) {
-                        Transaction transaction = Hazelcast.getTransaction();
+//                        Transaction transaction = Hazelcast.getTransaction();
                         try {
-                            transaction.begin();
+//                            transaction.begin();
                             Long reportId = queue.take();
                             CrashReport report = map.get(reportId);
                             process(report.getJSON());
                             map.put(reportId, report);
-                            transaction.commit();
+//                            transaction.commit();
                         } catch (Exception e) {
                             logger.log(Level.INFO, "Processor transaction rollback: ", e);
-                            transaction.rollback();
+//                            transaction.rollback();
                         }
                     }
                 }

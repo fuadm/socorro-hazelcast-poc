@@ -33,14 +33,24 @@
     <map name="crashReports">
         <backup-count>1</backup-count>
         <eviction-policy>LRU</eviction-policy>
-        <max-size>250000</max-size>
-        <eviction-percentage>10</eviction-percentage>
+        <max-size policy="map_size_per_jvm">5000</max-size>
+        <eviction-percentage>50</eviction-percentage>
         <merge-policy>hz.ADD_NEW_ENTRY</merge-policy>
-        <map-store enabled="false">
+        <map-store enabled="true">
             <class-name>com.hazelcast.socorro.persistence.ElasticSearchMapStore</class-name>
-            <write-delay-seconds>5</write-delay-seconds>
-            <property name = "host1">localhost</property>
+            <write-delay-seconds>10</write-delay-seconds>
+            <property name = "host1">10.66.41.173</property>
+            <property name = "host2">10.217.63.159</property>
+            <property name = "host3">10.108.123.185</property>
+            <property name = "host4">10.66.167.142</property>
+            <property name = "host5">10.66.41.123</property>
         </map-store>
         <cache-value>false</cache-value>
     </map>
 </hazelcast>
+
+        <!--map-store enabled="true">
+            <class-name>com.hazelcast.socorro.persistence.BerkeleyMapStore</class-name>
+            <write-delay-seconds>10</write-delay-seconds>
+        </map-store-->
+
