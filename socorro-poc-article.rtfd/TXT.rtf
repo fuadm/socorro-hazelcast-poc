@@ -13,7 +13,8 @@ Mozilla processes TB's of  Firefox crash reports daily using HBase, Hadoop, Pyth
 \f1\fs26 [1]
 \f0\fs24 , a 
 \f1\fs26 \cf2 server for collecting, processing, and displaying crash reports from clients\cf0 . 
-\f0\fs24 In this article we are going to explain how we integrated Hazelcast to Socorro and achieved caching and processing 2TB of crash reports in 50 node Hazelcast cluster. 
+\f0\fs24 In this article we are going to explain How Mozilla team plans to integrate Hazelcast into Socorro and achieved caching and processing 2TB of crash reports in 50 node Hazelcast cluster. The video for the de
+\f2 mo is available here: http://www.youtube.com/watch?v=KrrsE7LG8G4.
 \f1\fs26 \
 \
 \pard\tx560\tx1120\tx1680\tx2240\tx2800\tx3360\tx3920\tx4480\tx5040\tx5600\tx6160\tx6720\ql\qnatural\pardirnatural
@@ -33,23 +34,26 @@ Mozilla processes TB's of  Firefox crash reports daily using HBase, Hadoop, Pyth
 
 \f2 \cf0 Currently, Socorro has pythonic collectors, processors, and middleware that communicate with HBase via the Thrift protocol. One of the biggest limitations of the current architecture is that it is very sensitive to latency or outages on the HBase side. If the collectors cannot store an item in HBase then they will store it on local disk and it will not be accessible to the processors or middleware layer until it has been picked up by a cronjob and successfully stored in HBase. The same goes for processors, if they cannot retrieve the raw data and store the processed data, then it will not be available[2].\
 Today Socorro application stores about 2.6 million crash reports per day. During peak traffic, it receives about 2.5K crashes per minute. In current implementation a collector stores the crash report into HBase and puts the id of the report to Hazelcast Distributed Queue. The processors polls the Queue and start to process the report. Given the problem stated as HBase outage, Metrics Team at Mozilla contacted us for the possible usage of Hazelcast Distributed Map, in front of the HBase. The idea is to replace the thrift layer with Hazelcast client and store the crash reports into Hazelcast. An HBase Map store [3] will be implemented and Hazelcast will write behind the entries to HBase via that persister. The system will cash the hot data and will continue to operate even if HBase is down. Beside HBase, Socorro uses Elastic Search to index the reports to search later on. In this design Elastic Search will also be fed by Hazelcast map store implementation. This enables the Socorro to switch the persistence layer very easily. For small scale Socorro deployments, HBase usage becomes complex and they would like to use Elastic Search as the only storage. \
-So we decided to make a POC for Mozilla team and run it on EC2 servers. The details of the POC requirement can be found at [2]. The implementation is available under Apache 2.0 license at https://github.com/fuadm/socorro-hazelcast-poc/. To run the application you only need to have the latest Hazelcast and Elastic Search jars. The entry point to the application is com.hazelcast.socorro.Node class. When you run the main method, It will generate one Collector and a Processor. So each node will be both a Collector and a Processor. The Collectors will simulate the generation of crash reports and will submit them into Data Grid. The Processors will receive the newly submitted crash reports, process them and store back to distributed Map. If you enable the persistence, Hazelcast will persist the data to the Elastic Search. \
-\
+So we decided to make a POC for Mozilla team and run it on EC2 servers. The details of the POC requirement can be found at [2]. The implementation is available under Apache 2.0 license at https://github.com/fuadm/socorro-hazelcast-poc/. \
 
 \b Distributed Design\
 
-\b0 The number one rule of data distribution is "do not distribute". The throughput of the system increases as you move the operation to the data, rather than data to operation. In Hazelcast the entries are almost evenly distributed among the cluster nodes. Each node owns a set of entries. Within the application you need to process the items. There is two option here; you can either design the system with the processing in mind, and bring the data to the execution or you can take the benefit of data being distributed and do the execution on the node owning the data. If the second choice can be applied, we expect the system to behave much better in terms of latency, throughput, network and CPU usage. In this particular case the crash reports are stored in a distributed map called "crashReports" with the report id as the key. We would like to process a particular crash report on the node that owns it. \
+\b0 The number one rule of distributed programming is "do not distribute". The throughput of the system increases as you move the operation to the data, rather than data to operation. In Hazelcast the entries are almost evenly distributed among the cluster nodes. Each node owns a set of entries. Within the application you need to process the items. There are two option here; you can either design the system with the processing in mind, and bring the data to the execution or you can take the benefit of data being distributed and do the execution on the node owning the data. If the second choice can be applied, we expect the system to behave much better in terms of latency, throughput, network and CPU usage. In this particular case the crash reports are stored in a distributed map called "crashReports" with the report id as the key. We would like to process a particular crash report on the node that owns it. \
 \
 
 \b Collectors 
 \b0 \
-A Collector puts the crash report into "crashReports" map and report id with the insert date as the value into another map called "process" for the reports that need to be processed. This two put operations are done within transaction. Since the key to both map is the report id, both entries that has same key in "crashReports" map and "process" map are owned by the same node. \
+A Collector puts the crash report into "crashReports" map and report id with the insert date as the value into another map called "process" for the reports that need to be processed. These two put operations 
+\fs24 are done within transaction. Since both entries in 'crashReports' and 'process' maps have same key (report id), they are owned by the same node. Because key defines the owner node.
+\fs26 \
 
 \b \
 Processors\
 
-\b0 A Processor on each node adds a localEntryListener on the map "process" and is notified when a new entry is added. Notice that the listener is not listening the entire map, but only listens the local entries. There will be one and only one event per entry and that event will be delivered locally. Remember the "number one rule of distributed systems". \
-When the processor gets notified it gets the report, does the processing and puts it back and removes the entry from "process" map. All these operations are local, except the put which does one more put on the backup node. There is one more thing missing here. What if the Processor crashed or was not able to process the report when he get the notification? Good news is, the information regarding that a particular crash report should be processed is still in the map "process". There will be another thread that loops through the local entries in "process" map and process all unprocessed ones. Notice that under normal circumstances and if there is no backlog the map should be empty.  \
+\b0 A Processor on each node adds a localEntryListener on the map "process" and is notified when a new entry is added. Notice that the listener is not listening the entire map, but only listens the local entries. There will be one and only one event per entry and that event will be delivered locally. Remember the "number one rule of distributed programming". \
+When the processor gets notified it gets the report, does the processing and puts it back and removes the entry from "process" map. All these operations are local, except the put which does one more put on the backup node. There 
+\fs24 is one more thing missing here. What if the Processor is crashed or was not able to process the report when it gets the notification? Good 
+\fs26 news is, the information regarding that a particular crash report should be processed is still in the map "process". There will be another thread that loops through the local entries in "process" map and process all unprocessed ones. Notice that under normal circumstances and if there is no backlog the map should be empty.  \
 
 \b \
 Data size and Latency\
@@ -63,6 +67,10 @@ Data size and Latency\
 \
 
 \b Demo Details:\
+\
+
+\b0 To run the application you only need to have the latest Hazelcast and Elastic Search jars. The entry point to the application is com.hazelcast.socorro.Node class. When you run the main method, It will generate one Collector and a Processor. So each node will be both a Collector and a Processor. The Collectors will simulate the generation of crash reports and will submit them into Data Grid. The Processors will receive the newly submitted crash reports, process them and store back to distributed Map. If you enable the persistence, Hazelcast will persist the data to the Elastic Search. 
+\b \
 
 \b0 We run the application on 50 Node EC2 servers. In our simulation the average crash report size was 4MB. The aim was to store as much crash reports as we can, so we decided to go with largest possible memory which is 68.4 GB that is available at 
 \b\fs24 High-Memory Quadruple Extra Large Instance. 
@@ -72,13 +80,15 @@ With the similar way we deployed the Socorro POC app on 50 node m2.4xlarge insta
 We did the demo and recorded all the steps. We used the Hazelcast Management Center to visualize the cluster. Through the tool we can observe the throughput of the nodes, we can publish messages to the topic and observe the behavior of the cluster. 
 \b \
 
-\b0 Later we implemented the persistence to Elastic Search. But it couldn't keep up with the data load that we want to persist. We started 5 Hazelcast Nodes and 5 ES Nodes. A backlog appears while persisting to ES. I guess this is because of the EC2 IO. It seems that given the file size of average 4MB, there is no way of creating a 50 node and making 3K reports per minute and storing them into ES. At least this seems not possible on EC2 environment and with our limited ES knowledge. We still started a relatively small cluster persisting to 5 node ES. Recorded until it was obvious than we can not persist everything from memory to ES. A 10 minute video is available here: http://www.youtube.com/watch?v=7SCydqcn3Q0 . \
+\b0 Later we implemented the persistence to Elastic Search. But it couldn't keep up with the data load that we want to persist. We started 5 Hazelcast Nodes and 5 ES Nodes. A backlog appears while persisting to ES. I guess this is because of the EC2 IO. It seems that given the file size of average 4MB, there is no way of creating a 50 node and making 3K reports per minute and storing them into ES. At least this seems not possible on EC2 environment and with our limited ES knowledge. We still started a relatively small cluster persisting to 5 node ES. Recorded until it was obvious than we can not persist everything 
+\fs24 from memory to ES. A 10 minute video is available here:  http://www.youtube.com/watch?v=7SCydqcn3Q0.
+\fs26 \
 We think on Mozilla's environment it will be easy to store to HBase and with small deployments of Socorro ES will serve quite well. \
 
 \b Scalability\
 
-\b0 Another goal of POC was to demonstrate how one can scale up by adding more and more nodes. So we did another recording(http://www.youtube.com/watch?v=9iW2olZOYak) where we start with 5 nodes. The cluster is able to generate and process 600 crash reports per minute and stored 200 GB of data in memory. Then iteratively we add 5 more nodes and increase the load. We ended at 20 node cluster that was able to process 2400 reports per minute and store in memory 800 GB of data. We would like to highlight one thing here. To add a node does not immediately scale you up. It has it's initial cost which is backup and migrations. When new nodes arrive Hazelcast will start to migrate some of the partitions(buckets) from old ones to new nodes to achieve equal balance across the cluster. Once the partition is moved all entries falling into it will be stored on the node owning that patron. For more information on this topic can be found here: http://www.hazelcast.com/documentation.jsp#InternalsDistributedMap\
-In this demo the amount of data that we cache is huge, thus migrations take some time. Also note that while the migration, a request to the migrated data should wait until the migration is completed for the sake of consistency. That's why it is not a good idea to add nodes when your cluster have significantly large amount of data and is under high load that merely can response. \
+\b0 Another goal of POC was to demonstrate how one can scale up by adding more and more nodes. So we did another recording(http://www.youtube.com/watch?v=9iW2olZOYak) where we start with 5 nodes. The cluster is able to generate and process 600 crash reports per minute and stored 200 GB of data in memory. Then iteratively we add 5 more nodes and increase the load. We ended at 20 node cluster that was able to process 2400 reports per minute and store in memory 800 GB of data. We would like to highlight one thing here. To add a node does not immediately scale you up. It has it's initial cost which is backup and migrations. When new nodes arrive Hazelcast will start to migrate some of the partitions(buckets) from old ones to new nodes to achieve equal balance across the cluster. Once the partition is moved all entries falling into it will be stored on the node owning that partition. For more information on this topic can be found here: http://www.hazelcast.com/documentation.jsp#InternalsDistributedMap\
+In this demo the amount of data that we cache is huge, thus migrations take some time. Also note that while the migration, a request to the migrated data should wait until the migration is completed for the sake of consistency. That's why it is not a good idea to add nodes when your cluster have significantly large amount of data and is under high load that merely can respond. \
 \
 
 \b An alternative approach\
@@ -88,11 +98,9 @@ In this demo the amount of data that we cache is huge, thus migrations take some
 2. For a node to process the data, it should own it first. So if you add a new node, initially there will be no partitions and it will not participate on processing. As the partitions migrate it will participate more and more. You have to wait until the cluster is balanced to fully benefit from new coming nodes. \
 The second approach was to store the id's of unprocessed entries in a distributed queue. And processors take id's from queue and process the associated record. The data is not local here, most of the time a processor will process a record that it doesn't own. The performance will be worser but you can separate processors from collectors and when you add a processor to the cluster it will immediately start to do its job.  
 \b \
-
-\f1\b0 \
 \pard\tx720\tx1440\tx2160\tx2880\tx3600\tx4320\tx5040\tx5760\tx6480\tx7200\tx7920\tx8640\ql\qnatural\pardirnatural
-\cf0 \
-\
+
+\f1\b0 \cf0 \
 \
 [1] http://code.google.com/p/socorro/\
 [2] https://wiki.mozilla.org/Socorro:ClientAPI\
